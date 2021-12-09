@@ -13,51 +13,36 @@ Adafruit_TSL2591 tsl = Adafruit_TSL2591(2591);
 
 void setup() {
   Serial.begin(115200);
-  //while (!Serial);
-  
-  Serial.println("128x64 OLED FeatherWing test");
-  display.begin(0x3C, true); // Address 0x3C default
-
-  Serial.println("OLED begun");
-
-  // Show image buffer on the display hardware.
-  // Since the buffer is intialized with an Adafruit splashscreen
-  // internally, this will display the splashscreen.
+  // Address 0x3C default
+  display.begin(0x3C, true);
+  // Display Adafruit internal splash screen
   display.display();
   delay(3000);
-
-  // Clear the buffer.
+  // Clear and setup the display.
   display.clearDisplay();
   display.display();
-
   display.setRotation(1);
+  display.setTextSize(1);
+  display.setTextColor(SH110X_WHITE);
   display.setFont(&FreeSans9pt7b);
+  //Begin AHT
   if (aht.begin()) {
     Serial.println("Found AHT20");
   } else {
-    Serial.println("Didn't find AHT20");
-  }  
-
-  display.setTextSize(1);
-  display.setTextColor(SH110X_WHITE);
-    Serial.begin(9600);
-  
-  Serial.println(F("Starting Adafruit TSL2591 Test!"));
-  
+    Serial.println("!! Did not find AHT20 !!");
+  }
+  //Begin TSL2591
   if (tsl.begin()) 
   {
-    Serial.println(F("Found a TSL2591 sensor"));
+    Serial.println("Found a TSL2591 sensor");
   } 
   else 
   {
-    Serial.println(F("No sensor found ... check your wiring?"));
-    while (1);
+    Serial.println("!! Did not find TSL2591 !!");
   }
-    
-  /* Display some basic information on this sensor */
-  displaySensorDetails();
-  
-  /* Configure the sensor */
+  // Display some basic information on this sensor
+  // displaySensorDetails();
+  // Configure the sensor
   configureSensor();
 }
 
