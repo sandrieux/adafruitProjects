@@ -5,13 +5,18 @@
 #include <Adafruit_Sensor.h>
 #include <Adafruit_seesaw.h>
 #include <seesaw_neopixel.h>
+#include <EasyNextionLibrary.h> 
+
 #define refreshTempDelay 5000
 #define refreshAccelDelay 1000
+#define encoderSwithcDebounceTime 200 //Define how long we'll ignore clicks to debounce
 #define SS_SWITCH 24
 #define SS_NEOPIX 6
 #define SEESAW_BASE_ADDR 0x36
+
 Adafruit_AHTX0 aht;
 Adafruit_MPU6050 mpu;
+EasyNex myNex(Serial1);
 // create 2 encoders!
 Adafruit_seesaw encoders[2];
 // create 2 encoder pixels
@@ -24,6 +29,7 @@ bool found_encoders[] = {false, false};
 unsigned long refreshCurrent;
 unsigned long refreshTempLast;
 unsigned long refreshAccelLast;
+
 
 void setup() {
   //Initialize the refresh timer  
@@ -80,6 +86,9 @@ void setup() {
       }
   }
   Serial.println("Encoders started");
+  //Start the Nextion
+  myNex.begin(9600);
+  delay(500);
 }
 
 void loop() {  
@@ -98,7 +107,9 @@ void loop() {
       encoder_pixels[enc].show();
     }
   }
+  // Set current loop timestamp
   refreshCurrent = millis();
+  // Time to refresh temperature and humiidity? Move to function...
   if ( refreshCurrent - refreshTempLast > refreshTempDelay) {
     sensors_event_t humidity, temp;
     aht.getEvent(&humidity, &temp);
@@ -108,6 +119,7 @@ void loop() {
     Serial.print("Himidity: ");Serial.print(humidity.relative_humidity);Serial.println("%");
     refreshTempLast = millis(); 
   }
+  // Time to refresh accel and gyro? Move to function...
   if ( refreshCurrent - refreshAccelLast > refreshAccelDelay) {
     Serial.print("Fetching Acceleration and gyro every ");Serial.print(refreshAccelDelay);Serial.println(" ms");
     sensors_event_t a, g, temp;
@@ -121,10 +133,11 @@ void loop() {
     Serial.print("X: ");Serial.print(g.gyro.x);Serial.println(" rad/s");
     Serial.print("Y: ");Serial.print(g.gyro.y);Serial.println(" rad/s");
     Serial.print("Z: ");Serial.print(g.gyro.z);Serial.println(" rad/s");
-    refreshAccelLast = millis(); 
+    refreshAccelLast = millis();
   }
   delay(100);
 }
+
 //Functions
 uint32_t Wheel(byte WheelPos) {
   WheelPos = 255 - WheelPos;
