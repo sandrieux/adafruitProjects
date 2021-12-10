@@ -52,9 +52,10 @@ void loop() {
   
   aht.getEvent(&humidity, &temp);// populate temp and humidity objects with fresh data
   display.setCursor(0,20);
-  display.print("Temp: "); display.print(temp.temperature); display.println(" C");
+  display.print(temp.temperature); display.println(" C");
   display.setCursor(0,40);
   display.print("Hum: "); display.print(humidity.relative_humidity); display.println(" %");
+
   Serial.print("Temperature: ");Serial.print(temp.temperature);Serial.println(" degrees C");
   Serial.print("Pressure: ");Serial.print(humidity.relative_humidity);Serial.println(" RH %");
   
