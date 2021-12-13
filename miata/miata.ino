@@ -90,8 +90,8 @@ void setup() {
   myNex.begin(9600);
   delay(500);
 }
-
-void loop() {  
+void loop() {
+  myNex.NextionListen();
   for (uint8_t enc=0; enc<sizeof(found_encoders); enc++) { 
     if (found_encoders[enc] == false) continue;
     int32_t new_position = encoders[enc].getEncoderPosition();
@@ -150,4 +150,12 @@ uint32_t Wheel(byte WheelPos) {
   }
   WheelPos -= 170;
   return seesaw_NeoPixel::Color(WheelPos * 3, 255 - WheelPos * 3, 0);
+}
+void trigger1(){
+  //bVolPlus
+  Serial.println("Button bVolPlus pressed");
+}
+void trigger2(){
+  //bVolMinus
+  Serial.println("Button bVolMinus pressed");
 }
