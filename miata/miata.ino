@@ -5,10 +5,12 @@
 #include <Adafruit_Sensor.h>
 #include <Adafruit_seesaw.h>
 #include <seesaw_neopixel.h>
-#include <EasyNextionLibrary.h> 
+#include <EasyNextionLibrary.h>
+#include <RTClib.h>
+
 
 #define refreshTempDelay 5000
-#define refreshAccelDelay 1000
+#define refreshAccelDelay 5000
 #define encoderSwithcDebounceTime 200 //Define how long we'll ignore clicks to debounce
 #define SS_SWITCH 24
 #define SS_NEOPIX 6
@@ -16,20 +18,21 @@
 
 Adafruit_AHTX0 aht;
 Adafruit_MPU6050 mpu;
+RTC_DS3231 rtc;
 EasyNex myNex(Serial1);
 // create 2 encoders!
 Adafruit_seesaw encoders[2];
 // create 2 encoder pixels
-seesaw_NeoPixel encoder_pixels[2] = {
+seesaw_NeoPixel encoderPixels[2] = {
   seesaw_NeoPixel(1, SS_NEOPIX, NEO_GRB + NEO_KHZ800),
   seesaw_NeoPixel(1, SS_NEOPIX, NEO_GRB + NEO_KHZ800)
 };
-int32_t encoder_positions[] = {0, 0};
-bool found_encoders[] = {false, false};
+int32_t encoderPositions[] = {0, 0};
+bool foundEncoders[] = {false, false};
 unsigned long refreshCurrent;
 unsigned long refreshTempLast;
 unsigned long refreshAccelLast;
-
+int32_t audioVolume = 20;
 
 void setup() {
   //Initialize the refresh timer  
@@ -46,6 +49,15 @@ void setup() {
   } else {
       Serial.println("!! Did not find AHT20 !!");
   }
+  //Begin RTC
+    if (! rtc.begin()) {
+    Serial.println("Couldn't find RTC");
+  }
+
+//  if (rtc.lostPower()) {
+//    Serial.println("RTC lost power, let's set the time!");
+//    rtc.adjust(DateTime(2021,12,14,17,11,0));
+//  }
   //Begin MPU6050
   if (mpu.begin()) {
     Serial.println("Found MPU6050");
@@ -60,9 +72,9 @@ void setup() {
   }
   //Start seesaw encoders and pixels
   Serial.println("Seesaw Encoders:");
-  for (uint8_t enc=0; enc<sizeof(found_encoders); enc++) {
+  for (uint8_t enc=0; enc<sizeof(foundEncoders); enc++) {
       // See if we can find encoders on this address 
-      if (! encoders[enc].begin(SEESAW_BASE_ADDR + enc) || ! encoder_pixels[enc].begin(SEESAW_BASE_ADDR + enc)) {
+      if (! encoders[enc].begin(SEESAW_BASE_ADDR + enc) || ! encoderPixels[enc].begin(SEESAW_BASE_ADDR + enc)) {
           Serial.print("Couldn't find encoder #");
           Serial.println(enc);
       } else {
@@ -78,11 +90,11 @@ void setup() {
           // use a pin for the built in encoder switch
           encoders[enc].pinMode(SS_SWITCH, INPUT_PULLUP);
           // get starting position
-          encoder_positions[enc] = encoders[enc].getEncoderPosition();
+          encoderPositions[enc] = encoders[enc].getEncoderPosition();
           // set not so bright!
-          encoder_pixels[enc].setBrightness(90);
-          encoder_pixels[enc].show();
-          found_encoders[enc] = true;
+          encoderPixels[enc].setBrightness(90);
+          encoderPixels[enc].show();
+          foundEncoders[enc] = true;
       }
   }
   Serial.println("Encoders started");
@@ -92,19 +104,50 @@ void setup() {
 }
 void loop() {
   myNex.NextionListen();
-  for (uint8_t enc=0; enc<sizeof(found_encoders); enc++) { 
-    if (found_encoders[enc] == false) continue;
-    int32_t new_position = encoders[enc].getEncoderPosition();
-    // did we move around?
-    if (encoder_positions[enc] != new_position) {
-      Serial.print("Encoder #");
-      Serial.print(enc);
-      Serial.print(" -> ");
-      Serial.println(new_position);
-      encoder_positions[enc] = new_position;
-      // change the neopixel color, mulitply the new positiion by 4 to speed it up
-      encoder_pixels[enc].setPixelColor(0, Wheel((new_position*4) & 0xFF));
-      encoder_pixels[enc].show();
+  
+//  for (uint8_t enc=0; enc<sizeof(found_encoders); enc++) { 
+//    if (found_encoders[enc] == false) continue;
+//    int32_t new_position = encoders[enc].getEncoderPosition();
+//    // did we move around?
+//    if (encoder_positions[enc] != new_position) {
+//      Serial.print("Encoder #");
+//      Serial.print(enc);
+//      Serial.print(" -> ");
+//      Serial.println(new_position);
+//      encoder_positions[enc] = new_position;
+//      // change the neopixel color, mulitply the new positiion by 4 to speed it up
+//      encoder_pixels[enc].setPixelColor(0, Wheel((new_position*4) & 0xFF));
+//      encoder_pixels[enc].show();
+//    }
+//  }
+  // Fetch encoder positions and button press
+  int32_t newPosition[] = {0, 0};
+  for (uint8_t enc=0; enc<sizeof(foundEncoders); enc++) { 
+    if (foundEncoders[enc] == false) continue;
+    newPosition[enc] = encoders[enc].getEncoderPosition();
+    if (! encoders[enc].digitalRead(SS_SWITCH)) {
+//      encoderPress([enc]);
+    }
+  }
+  
+  //encoder 0 for volume and mute
+  if ( newPosition[0] < encoderPositions[0]) {
+    Serial.print("volume up, encoder position: ");
+    Serial.println(newPosition[0]);
+    encoderPositions[0] = newPosition[0];
+    if (audioVolume < 100) {
+      audioVolume += 5;
+      Serial.print("New volume");
+      Serial.println(audioVolume);
+    }
+  } else if ( newPosition[0] > encoderPositions[0]) {
+    Serial.print("volume down, encoder position: ");
+    Serial.println(newPosition[0]);
+    encoderPositions[0] = newPosition[0];
+    if (audioVolume > 0) {
+      audioVolume -= 5;
+      Serial.print("New volume");
+      Serial.println(audioVolume);
     }
   }
   // Set current loop timestamp
@@ -117,7 +160,20 @@ void loop() {
     Serial.print("Uptime: ");Serial.print(refreshCurrent);Serial.println(" ms");
     Serial.print("Temperature: ");Serial.print(temp.temperature);Serial.println("° C");
     Serial.print("Himidity: ");Serial.print(humidity.relative_humidity);Serial.println("%");
-    refreshTempLast = millis(); 
+    refreshTempLast = millis();
+    DateTime now = rtc.now();
+    Serial.print(now.year(), DEC);
+    Serial.print('/');
+    Serial.print(now.month(), DEC);
+    Serial.print('/');
+    Serial.print(now.day(), DEC);
+    Serial.print(" ");
+    Serial.print(now.hour(), DEC);
+    Serial.print(':');
+    Serial.print(now.minute(), DEC);
+    Serial.print(':');
+    Serial.print(now.second(), DEC);
+    Serial.println();
   }
   // Time to refresh accel and gyro? Move to function...
   if ( refreshCurrent - refreshAccelLast > refreshAccelDelay) {
