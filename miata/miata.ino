@@ -10,10 +10,11 @@
 
 #define refreshTempDelay 5000
 #define refreshAccelDelay 5000
-#define encoderSwithcDebounceTime 50 //Define how long we'll ignore clicks to debounce
+#define encoderSwithcDebounceTime 300 //Define how long we'll ignore clicks to debounce
 #define SS_SWITCH 24
 #define SS_NEOPIX 6
 #define SEESAW_BASE_ADDR 0x36
+
 
 Adafruit_AHTX0 aht;
 Adafruit_MPU6050 mpu;
@@ -34,6 +35,9 @@ unsigned long refreshTempLast;
 unsigned long refreshAccelLast;
 int32_t audioVolume = 20;
 int32_t audioVolumeSave = 20;
+bool audioMute = false;
+bool menuPop = false;
+
 
 void setup() {
   //Initialize the refresh timer  
@@ -94,8 +98,7 @@ void setup() {
           encoders[enc].pinMode(SS_SWITCH, INPUT_PULLUP);
           // get starting position
           encoderPositions[enc] = encoders[enc].getEncoderPosition();
-          // set not so bright!
-          encoderPixels[enc].setBrightness(90);
+          encoderPixels[enc].setBrightness(100);
           encoderPixels[enc].show();
           foundEncoders[enc] = true;
       }
@@ -118,55 +121,16 @@ void setup() {
   Serial.print(':');
   Serial.print(now.second(), DEC);
   Serial.println();
+  String currenTime = "";
+  currenTime = currenTime + now.hour() + ":" + now.minute();
+  myNex.writeStr("gTime.txt", currenTime);   
 }
 void loop() {
-  // Set current loop timestamp
   refreshCurrent = millis();
   myNex.NextionListen();
-  // Fetch encoder positions and button press
-  int32_t newPosition[] = {0, 0};
-  for (uint8_t enc=0; enc<sizeof(foundEncoders); enc++) { 
-    if (foundEncoders[enc] == false) continue;
-    newPosition[enc] = encoders[enc].getEncoderPosition();
-    
-    //Encoder press
-    if (! encoders[enc].digitalRead(SS_SWITCH)) {
-      if ( encoderPress[enc] == 0 ) {
-        encoderPress[enc] = millis();
-        processEncoderPress(enc);
-      } else if ( refreshCurrent > encoderPress[enc] + encoderSwithcDebounceTime ) {
-        encoderPress[enc] = 0;
-      }
-    }
-  }
-  processEncoderRotation (newPosition,)
-
-  // Time to refresh temperature and humiidity? Move to function...
-  if ( refreshCurrent - refreshTempLast > refreshTempDelay) {
-    sensors_event_t humidity, temp;
-    aht.getEvent(&humidity, &temp);
-//    Serial.print("Fetching Temp and humidity every ");Serial.print(refreshTempDelay);Serial.println(" ms");
-//    Serial.print("Uptime: ");Serial.print(refreshCurrent);Serial.println(" ms");
-//    Serial.print("Temperature: ");Serial.print(temp.temperature);Serial.println("° C");
-//    Serial.print("Himidity: ");Serial.print(humidity.relative_humidity);Serial.println("%");
-    refreshTempLast = millis();
-  }
-  // Time to refresh accel and gyro? Move to function...
-  if ( refreshCurrent - refreshAccelLast > refreshAccelDelay) {
-//    Serial.print("Fetching Acceleration and gyro every ");Serial.print(refreshAccelDelay);Serial.println(" ms");
-    sensors_event_t a, g, temp;
-    mpu.getEvent(&a, &g, &temp);
-    /* Print out the values */
-//    Serial.println("Acceleration");
-//    Serial.print("X: ");Serial.print(a.acceleration.x*0.101972);Serial.println(" G");
-//    Serial.print("Y: ");Serial.print(a.acceleration.y*0.101972);Serial.println(" G");
-//    Serial.print("Z: ");Serial.print(a.acceleration.z*0.101972);Serial.println(" G");
-//    Serial.println("Rotation");
-//    Serial.print("X: ");Serial.print(g.gyro.x);Serial.println(" rad/s");
-//    Serial.print("Y: ");Serial.print(g.gyro.y);Serial.println(" rad/s");
-//    Serial.print("Z: ");Serial.print(g.gyro.z);Serial.println(" rad/s");
-    refreshAccelLast = millis();
-  }
+  processEncoder();
+  processTemp();
+  processAccel();
 }
 
 //Functions
@@ -182,58 +146,116 @@ uint32_t Wheel(byte WheelPos) {
   WheelPos -= 170;
   return seesaw_NeoPixel::Color(WheelPos * 3, 255 - WheelPos * 3, 0);
 }
+
 void trigger1(){
   //bVolPlus
-  Serial.println("Button bVolPlus pressed");
+  if (audioVolume < 100) {
+    audioVolume += 5;
+    Serial.print("Volume from HMI: ");Serial.println(audioVolume);
+  }
 }
 void trigger2(){
   //bVolMinus
-  Serial.println("Button bVolMinus pressed");
-}
-
-void processEncoderPress (int encoderNumber) {
-  switch (encoderNumber) {
-    case 0:
-      //Encoder 0 pressed = mute
-      Serial.println("Encoder #0 Pressed");
-      if (audioVolume == 0){
-        audioVolume == audioVolumeSave == 0;
-      } else {
-        audioVolumeSave == audioVolume;
-        audioVolume == 0;
-      }
-      break;
-    case 1:
-      Serial.println("Encoder #1 Pressed");
-      break;
+  if (audioVolume > 0) {
+    audioVolume -= 5;
+    Serial.print("Volume from HMI: ");Serial.println(audioVolume);
   }
 }
 
-void processEncoderRotation (int encoderNumber) {
-  switch (encoderNumber) {
-    case 0:
-    //encoder 0 for volume and mute
-    if ( newPosition[encoderNumber] < encoderPositions[encoderNumber]) {
-      Serial.print("volume up, encoder position: ");
-      Serial.println(newPosition[0]);
-      encoderPositions[0] = newPosition[0];
-      if (audioVolume < 100) {
-        audioVolume += 5;
-        Serial.print("New volume");
-        Serial.println(audioVolume);
-      }
-    } else if ( newPosition[encoderNumber] > encoderPositions[encoderNumber]) {
-      Serial.print("volume down, encoder position: ");
-      Serial.println(newPosition[0]);
-      encoderPositions[0] = newPosition[0];
-      if (audioVolume > 0) {
-        audioVolume -= 5;
-        Serial.print("New volume");
-        Serial.println(audioVolume);
+void processEncoder () {
+  int32_t newPosition;
+  for (uint8_t enc=0; enc<sizeof(foundEncoders); enc++) { 
+    if (foundEncoders[enc] == false) continue;
+    newPosition = encoders[enc].getEncoderPosition(); 
+    switch (enc) {
+      case 0:
+        //encoder 0 for volume
+        if (!audioMute) {
+          if ( newPosition < encoderPositions[enc]) {
+            if (audioVolume < 100) {
+              audioVolume += 5;
+              Serial.print("Volume: ");Serial.println(audioVolume);
+              myNex.writeNum("gVol.val", audioVolume);              
+            }
+          } else if ( newPosition > encoderPositions[enc]) {
+            if (audioVolume > 0) {
+              audioVolume -= 5;
+              Serial.print("Volume: ");Serial.println(audioVolume);
+              myNex.writeNum("gVol.val", audioVolume);
+            }
+          }
+        }
+        break;
+      case 1:
+        if ( newPosition != encoderPositions[enc]) {
+          Serial.print("Encoder #1 new position: ");Serial.println(newPosition);
+        }
+        break;
+    }
+    encoderPositions[enc] = newPosition;
+    //Encoder press
+    if (! encoders[enc].digitalRead(SS_SWITCH)) {
+      if ( encoderPress[enc] == 0 ) {
+        encoderPress[enc] = millis();
+          switch (enc) {
+            case 0:
+              audioMute = !audioMute;
+              if (!audioMute){
+                audioVolume = audioVolumeSave;
+                Serial.println("Volume: unmute");
+              } else {
+                audioVolumeSave = audioVolume;
+                audioVolume = 0;
+                Serial.println("Volume: mute");
+              }
+              myNex.writeNum("MainPage.gVol.val", audioVolume);
+              break;
+            case 1:
+              menuPop = !menuPop;
+              if (menuPop) {
+                Serial.println("Menu opened");
+              } else {
+                Serial.println("Menu closed");
+              }
+              break;
+            }
+      } else if ( refreshCurrent > encoderPress[enc] + encoderSwithcDebounceTime ) {
+        encoderPress[enc] = 0;
       }
     }
-    case 1:
-      Serial.println("Encoder #1 Rotation");
-      break;
+  }
+}
+
+void processTemp () {
+  if ( refreshCurrent - refreshTempLast > refreshTempDelay) {
+    sensors_event_t humidity, temp;
+    aht.getEvent(&humidity, &temp);
+    refreshTempLast = millis();
+    // Serial.print("Fetching Temp and humidity every ");Serial.print(refreshTempDelay);Serial.println(" ms");
+    // Serial.print("Uptime: ");Serial.print(refreshCurrent);Serial.println(" ms");
+    // Serial.print("Temperature: ");Serial.print(temp.temperature);Serial.println("° C");
+    // Serial.print("Himidity: ");Serial.print(humidity.relative_humidity);Serial.println("%");
+  }
+}
+
+void processAccel () {
+  if ( refreshCurrent - refreshAccelLast > refreshAccelDelay) {
+    //Serial.print("Fetching Acceleration and gyro every ");Serial.print(refreshAccelDelay);Serial.println(" ms");
+    sensors_event_t a, g, temp;
+    mpu.getEvent(&a, &g, &temp);
+    // Serial.println("Acceleration");
+    // Serial.print("X: ");Serial.print(a.acceleration.x*0.101972);Serial.println(" G");
+    // Serial.print("Y: ");Serial.print(a.acceleration.y*0.101972);Serial.println(" G");
+    // Serial.print("Z: ");Serial.print(a.acceleration.z*0.101972);Serial.println(" G");
+    // Serial.println("Rotation");
+    // Serial.print("X: ");Serial.print(g.gyro.x);Serial.println(" rad/s");
+    // Serial.print("Y: ");Serial.print(g.gyro.y);Serial.println(" rad/s");
+    // Serial.print("Z: ");Serial.print(g.gyro.z);Serial.println(" rad/s");
+    refreshAccelLast = millis();
+    DateTime now = rtc.now();
+    String currenTime = "";
+    currenTime = currenTime + now.hour() + ":" + now.minute();
+    myNex.writeStr("gTime.txt", currenTime);
+    Serial.print(currenTime);
   }
 }
