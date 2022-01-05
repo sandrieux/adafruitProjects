@@ -7,14 +7,14 @@
 #include <seesaw_neopixel.h>
 #include <EasyNextionLibrary.h>
 #include <RTClib.h>
+#include <BluetoothA2DPSink.h>
 
-#define refreshTempDelay 5000
+#define refreshTempDelay 30000
 #define refreshAccelDelay 5000
 #define encoderSwithcDebounceTime 300 //Define how long we'll ignore clicks to debounce
 #define SS_SWITCH 24
 #define SS_NEOPIX 6
 #define SEESAW_BASE_ADDR 0x36
-
 
 Adafruit_AHTX0 aht;
 Adafruit_MPU6050 mpu;
@@ -27,6 +27,8 @@ seesaw_NeoPixel encoderPixels[2] = {
   seesaw_NeoPixel(1, SS_NEOPIX, NEO_GRB + NEO_KHZ800),
   seesaw_NeoPixel(1, SS_NEOPIX, NEO_GRB + NEO_KHZ800)
 };
+BluetoothA2DPSink a2dp_sink;
+
 int32_t encoderPositions[] = {0, 0};
 unsigned long encoderPress[] = {0, 0};
 bool foundEncoders[] = {false, false};
@@ -47,7 +49,7 @@ void setup() {
   
   // Start serial and wait for port to open
   Serial.begin(115200);
-  while (!Serial) delay(10);
+  while (!Serial) delay(100);
   //Delay to wait for serial monitor to begin
   delay(2000);
   //Begin AHT
@@ -60,7 +62,29 @@ void setup() {
     if (! rtc.begin()) {
     Serial.println("Couldn't find RTC");
   }
-
+  i2s_pin_config_t my_pin_config = {
+    .bck_io_num = 15,
+    .ws_io_num = 32,
+    .data_out_num = 14,
+    .data_in_num = I2S_PIN_NO_CHANGE
+  };
+  a2dp_sink.set_pin_config(my_pin_config);
+  static const i2s_config_t i2s_config = {
+    .mode = (i2s_mode_t) (I2S_MODE_MASTER | I2S_MODE_TX),
+    .sample_rate = 41000,
+    .bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT,
+    .channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT,
+    .communication_format = (i2s_comm_format_t) (I2S_COMM_FORMAT_I2S | I2S_COMM_FORMAT_I2S_LSB),
+    .intr_alloc_flags = 0, // default interrupt priority
+    .dma_buf_count = 8,
+    .dma_buf_len = 64,
+    .use_apll = false,
+    .tx_desc_auto_clear = true // avoiding noise in case of data unavailability
+  };
+  a2dp_sink.set_i2s_config(i2s_config);
+  a2dp_sink.set_avrc_metadata_attribute_mask(ESP_AVRC_MD_ATTR_TITLE | ESP_AVRC_MD_ATTR_ARTIST | ESP_AVRC_MD_ATTR_PLAYING_TIME);
+  a2dp_sink.set_avrc_metadata_callback(processMusicData);
+  a2dp_sink.start("Ma bite");
 //  if (rtc.lostPower()) {
 //    Serial.println("RTC lost power, let's set the time!");
 //    rtc.adjust(DateTime(2021,12,14,17,11,0));
@@ -107,23 +131,7 @@ void setup() {
   //Start the Nextion
   myNex.begin(9600);
   delay(500);
-  DateTime now = rtc.now();
-  Serial.print("Boot time: ");
-  Serial.print(now.year(), DEC);
-  Serial.print('/');
-  Serial.print(now.month(), DEC);
-  Serial.print('/');
-  Serial.print(now.day(), DEC);
-  Serial.print(" ");
-  Serial.print(now.hour(), DEC);
-  Serial.print(':');
-  Serial.print(now.minute(), DEC);
-  Serial.print(':');
-  Serial.print(now.second(), DEC);
-  Serial.println();
-  String currenTime = "";
-  currenTime = currenTime + now.hour() + ":" + now.minute();
-  myNex.writeStr("gTime.txt", currenTime);   
+  myNex.writeStr("pageMain");
 }
 void loop() {
   refreshCurrent = millis();
@@ -162,14 +170,30 @@ void trigger2(){
   }
 }
 
+void trigger3(){
+  //bVolMute
+  audioMute = !audioMute;
+    if (!audioMute){
+      audioVolume = audioVolumeSave;
+      Serial.println("Volume: unmute");
+      myNex.writeNum("bVolMute.pco",0);
+    } else {
+      audioVolumeSave = audioVolume;
+      audioVolume = 0;
+      Serial.println("Volume: mute");
+      myNex.writeNum("bVolMute.pco",63488);
+    }
+    myNex.writeNum("gVol.val", audioVolume);
+}
+
 void processEncoder () {
   int32_t newPosition;
   for (uint8_t enc=0; enc<sizeof(foundEncoders); enc++) { 
     if (foundEncoders[enc] == false) continue;
     newPosition = encoders[enc].getEncoderPosition(); 
     switch (enc) {
-      case 0:
-        //encoder 0 for volume
+      case 1:
+        //encoder 1 for volume
         if (!audioMute) {
           if ( newPosition < encoderPositions[enc]) {
             if (audioVolume < 100) {
@@ -186,9 +210,9 @@ void processEncoder () {
           }
         }
         break;
-      case 1:
+      case 0:
         if ( newPosition != encoderPositions[enc]) {
-          Serial.print("Encoder #1 new position: ");Serial.println(newPosition);
+          Serial.print("Encoder #0 new position: ");Serial.println(newPosition);
         }
         break;
     }
@@ -198,19 +222,21 @@ void processEncoder () {
       if ( encoderPress[enc] == 0 ) {
         encoderPress[enc] = millis();
           switch (enc) {
-            case 0:
+            case 1:
               audioMute = !audioMute;
               if (!audioMute){
                 audioVolume = audioVolumeSave;
                 Serial.println("Volume: unmute");
+                myNex.writeNum("bVolMute.pco",0);
               } else {
                 audioVolumeSave = audioVolume;
                 audioVolume = 0;
                 Serial.println("Volume: mute");
+                myNex.writeNum("bVolMute.pco",63488);
               }
-              myNex.writeNum("MainPage.gVol.val", audioVolume);
+              myNex.writeNum("gVol.val", audioVolume);
               break;
-            case 1:
+            case 0:
               menuPop = !menuPop;
               if (menuPop) {
                 Serial.println("Menu opened");
@@ -235,6 +261,10 @@ void processTemp () {
     // Serial.print("Uptime: ");Serial.print(refreshCurrent);Serial.println(" ms");
     // Serial.print("Temperature: ");Serial.print(temp.temperature);Serial.println("° C");
     // Serial.print("Himidity: ");Serial.print(humidity.relative_humidity);Serial.println("%");
+    String currenWeather ="";
+    currenWeather = currenWeather + temp.temperature + " C";
+    myNex.writeStr("gWeather.txt",currenWeather);
+    Serial.print("Temperature: ");Serial.print(temp.temperature);Serial.println(" C");
   }
 }
 
@@ -254,8 +284,27 @@ void processAccel () {
     refreshAccelLast = millis();
     DateTime now = rtc.now();
     String currenTime = "";
-    currenTime = currenTime + now.hour() + ":" + now.minute();
-    myNex.writeStr("gTime.txt", currenTime);
-    Serial.print(currenTime);
+    currenTime = currenTime + now.hour() + ":";
+    if (now.minute() < 10) {
+      currenTime = currenTime + "0" + now.minute();
+    } else {
+      currenTime = currenTime + now.minute();
+    }
+    myNex.writeStr("gTime.txt",currenTime);
+    Serial.println(currenTime);
+  }
+}
+
+void processMusicData(uint8_t data1, const uint8_t *data2) {
+  Serial.printf("AVRC metadata rsp: attribute id 0x%x, %s\n", data1, data2);
+  char musicData[64];
+  sprintf(musicData,"%s", data2);
+  switch (data1) {
+    case 1:
+      myNex.writeStr("gMusicT.val",musicData);
+      break;
+    case 2:
+      myNex.writeStr("gMusicA.val",musicData);
+      break;
   }
 }
