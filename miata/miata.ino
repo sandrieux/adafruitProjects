@@ -11,6 +11,7 @@
 
 #define refreshTempDelay 30000
 #define refreshAccelDelay 5000
+#define refreshTimeDelay 5000
 #define encoderSwithcDebounceTime 300 //Define how long we'll ignore clicks to debounce
 #define SS_SWITCH 24
 #define SS_NEOPIX 6
@@ -35,6 +36,7 @@ bool foundEncoders[] = {false, false};
 unsigned long refreshCurrent;
 unsigned long refreshTempLast;
 unsigned long refreshAccelLast;
+unsigned long refreshTimeLast;
 int32_t audioVolume = 20;
 int32_t audioVolumeSave = 20;
 bool audioMute = false;
@@ -46,6 +48,7 @@ void setup() {
   refreshCurrent = millis();
   refreshTempLast = refreshCurrent - refreshTempDelay;
   refreshAccelLast = refreshCurrent - refreshAccelDelay;
+  refreshTimeLast = refreshCurrent - refreshTimeDelay;
   
   // Start serial and wait for port to open
   Serial.begin(115200);
@@ -139,6 +142,7 @@ void loop() {
   processEncoder();
   processTemp();
   processAccel();
+  processTime();
 }
 
 //Functions
@@ -268,20 +272,9 @@ void processTemp () {
   }
 }
 
-void processAccel () {
-  if ( refreshCurrent - refreshAccelLast > refreshAccelDelay) {
-    //Serial.print("Fetching Acceleration and gyro every ");Serial.print(refreshAccelDelay);Serial.println(" ms");
-    sensors_event_t a, g, temp;
-    mpu.getEvent(&a, &g, &temp);
-    // Serial.println("Acceleration");
-    // Serial.print("X: ");Serial.print(a.acceleration.x*0.101972);Serial.println(" G");
-    // Serial.print("Y: ");Serial.print(a.acceleration.y*0.101972);Serial.println(" G");
-    // Serial.print("Z: ");Serial.print(a.acceleration.z*0.101972);Serial.println(" G");
-    // Serial.println("Rotation");
-    // Serial.print("X: ");Serial.print(g.gyro.x);Serial.println(" rad/s");
-    // Serial.print("Y: ");Serial.print(g.gyro.y);Serial.println(" rad/s");
-    // Serial.print("Z: ");Serial.print(g.gyro.z);Serial.println(" rad/s");
-    refreshAccelLast = millis();
+void processTime () {
+  if ( refreshCurrent - refreshTimeLast > refreshTimeDelay) {
+    refreshTimeLast = millis();
     DateTime now = rtc.now();
     String currenTime = "";
     currenTime = currenTime + now.hour() + ":";
@@ -295,16 +288,32 @@ void processAccel () {
   }
 }
 
+void processAccel () {
+  if ( refreshCurrent - refreshAccelLast > refreshAccelDelay) {
+    //Serial.print("Fetching Acceleration and gyro every ");Serial.print(refreshAccelDelay);Serial.println(" ms");
+    sensors_event_t a, g, temp;
+    mpu.getEvent(&a, &g, &temp);
+    // Serial.println("Acceleration");
+    // Serial.print("X: ");Serial.print(a.acceleration.x*0.101972);Serial.println(" G");
+    // Serial.print("Y: ");Serial.print(a.acceleration.y*0.101972);Serial.println(" G");
+    // Serial.print("Z: ");Serial.print(a.acceleration.z*0.101972);Serial.println(" G");
+    // Serial.println("Rotation");
+    // Serial.print("X: ");Serial.print(g.gyro.x);Serial.println(" rad/s");
+    // Serial.print("Y: ");Serial.print(g.gyro.y);Serial.println(" rad/s");
+    // Serial.print("Z: ");Serial.print(g.gyro.z);Serial.println(" rad/s");
+  }
+}
+
 void processMusicData(uint8_t data1, const uint8_t *data2) {
   Serial.printf("AVRC metadata rsp: attribute id 0x%x, %s\n", data1, data2);
   char musicData[64];
   sprintf(musicData,"%s", data2);
   switch (data1) {
     case 1:
-      myNex.writeStr("gMusicT.val",musicData);
+      myNex.writeStr("gMusicT.txt",musicData);
       break;
     case 2:
-      myNex.writeStr("gMusicA.val",musicData);
+      myNex.writeStr("gMusicA.txt",musicData);
       break;
   }
 }
