@@ -1,7 +1,7 @@
 #include <SPI.h>
 #include <Wire.h>
 #include <Adafruit_AHTX0.h>
-#include <Adafruit_MPU6050.h>
+//#include <Adafruit_MPU6050.h>
 #include <Adafruit_Sensor.h>
 #include <Adafruit_seesaw.h>
 #include <seesaw_neopixel.h>
@@ -18,7 +18,7 @@
 #define SEESAW_BASE_ADDR 0x36
 
 Adafruit_AHTX0 aht;
-Adafruit_MPU6050 mpu;
+//Adafruit_MPU6050 mpu;
 RTC_DS3231 rtc;
 EasyNex myNex(Serial1);
 // create 2 encoders!
@@ -65,6 +65,7 @@ void setup() {
     if (! rtc.begin()) {
     Serial.println("Couldn't find RTC");
   }
+  //Begin BT
   i2s_pin_config_t my_pin_config = {
     .bck_io_num = 15,
     .ws_io_num = 32,
@@ -93,17 +94,17 @@ void setup() {
 //    rtc.adjust(DateTime(2021,12,14,17,11,0));
 //  }
   //Begin MPU6050
-  if (mpu.begin()) {
-    Serial.println("Found MPU6050");
-    mpu.setAccelerometerRange(MPU6050_RANGE_4_G);
-    Serial.print("Accel range: ");Serial.println(mpu.getAccelerometerRange());
-    mpu.setGyroRange(MPU6050_RANGE_500_DEG);
-    Serial.print("Gyro range: ");Serial.println(mpu.getGyroRange());
-    mpu.setFilterBandwidth(MPU6050_BAND_21_HZ);Serial.println(mpu.getFilterBandwidth());
-    Serial.print("Filter bandwidth set to: ");
-  } else {
-    Serial.println("!! Did not found MPU6050 !!");
-  }
+  // if (mpu.begin()) {
+  //   Serial.println("Found MPU6050");
+  //   mpu.setAccelerometerRange(MPU6050_RANGE_4_G);
+  //   Serial.print("Accel range: ");Serial.println(mpu.getAccelerometerRange());
+  //   mpu.setGyroRange(MPU6050_RANGE_500_DEG);
+  //   Serial.print("Gyro range: ");Serial.println(mpu.getGyroRange());
+  //   mpu.setFilterBandwidth(MPU6050_BAND_21_HZ);Serial.println(mpu.getFilterBandwidth());
+  //   Serial.print("Filter bandwidth set to: ");
+  // } else {
+  //   Serial.println("!! Did not found MPU6050 !!");
+  // }
   //Start seesaw encoders and pixels
   Serial.println("Seesaw Encoders:");
   for (uint8_t enc=0; enc<sizeof(foundEncoders); enc++) {
@@ -141,7 +142,7 @@ void loop() {
   myNex.NextionListen();
   processEncoder();
   processTemp();
-  processAccel();
+  //processAccel();
   processTime();
 }
 
@@ -288,21 +289,21 @@ void processTime () {
   }
 }
 
-void processAccel () {
-  if ( refreshCurrent - refreshAccelLast > refreshAccelDelay) {
-    //Serial.print("Fetching Acceleration and gyro every ");Serial.print(refreshAccelDelay);Serial.println(" ms");
-    sensors_event_t a, g, temp;
-    mpu.getEvent(&a, &g, &temp);
-    // Serial.println("Acceleration");
-    // Serial.print("X: ");Serial.print(a.acceleration.x*0.101972);Serial.println(" G");
-    // Serial.print("Y: ");Serial.print(a.acceleration.y*0.101972);Serial.println(" G");
-    // Serial.print("Z: ");Serial.print(a.acceleration.z*0.101972);Serial.println(" G");
-    // Serial.println("Rotation");
-    // Serial.print("X: ");Serial.print(g.gyro.x);Serial.println(" rad/s");
-    // Serial.print("Y: ");Serial.print(g.gyro.y);Serial.println(" rad/s");
-    // Serial.print("Z: ");Serial.print(g.gyro.z);Serial.println(" rad/s");
-  }
-}
+// void processAccel () {
+//   if ( refreshCurrent - refreshAccelLast > refreshAccelDelay) {
+//     //Serial.print("Fetching Acceleration and gyro every ");Serial.print(refreshAccelDelay);Serial.println(" ms");
+//     sensors_event_t a, g, temp;
+//     mpu.getEvent(&a, &g, &temp);
+//     // Serial.println("Acceleration");
+//     // Serial.print("X: ");Serial.print(a.acceleration.x*0.101972);Serial.println(" G");
+//     // Serial.print("Y: ");Serial.print(a.acceleration.y*0.101972);Serial.println(" G");
+//     // Serial.print("Z: ");Serial.print(a.acceleration.z*0.101972);Serial.println(" G");
+//     // Serial.println("Rotation");
+//     // Serial.print("X: ");Serial.print(g.gyro.x);Serial.println(" rad/s");
+//     // Serial.print("Y: ");Serial.print(g.gyro.y);Serial.println(" rad/s");
+//     // Serial.print("Z: ");Serial.print(g.gyro.z);Serial.println(" rad/s");
+//   }
+// }
 
 void processMusicData(uint8_t data1, const uint8_t *data2) {
   Serial.printf("AVRC metadata rsp: attribute id 0x%x, %s\n", data1, data2);
